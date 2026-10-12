@@ -64,11 +64,16 @@
   .theme-card .st { font-size: 0.8rem; color: var(--sub); font-weight: 400; display: block; }
   .theme-card.done .no { background: var(--accent); color: #fff; }
   .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--sub); }
+  .bk { margin-top: 18px; font-size: 0.88rem; color: var(--sub); }
+  .bk.warn { color: var(--warn); font-weight: 600; }
+  .bk button.link { padding: 0; font-size: 0.88rem; }
   .foot { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.9rem; }
 
   /* ---- 書く画面 ---- */
   .wtop { display: flex; justify-content: space-between; align-items: center; }
-  .count { color: var(--accent); font-weight: 700; font-size: 0.95rem; }
+  .count { color: var(--accent); font-weight: 700; font-size: 0.95rem; min-width: 3.2em; text-align: right; }
+  .tools { display: flex; gap: 6px; align-items: center; }
+  button.mini { padding: 4px 10px; font-size: 0.82rem; border-radius: 8px; }
   .banner { background: var(--accent); color: #fff; border-radius: 12px; padding: 12px 16px; margin: 6px 0 12px; }
   .banner small { display: block; opacity: .85; font-size: 0.78rem; }
   .banner div { font-size: 1.02rem; font-weight: 700; line-height: 1.6; }
@@ -121,7 +126,8 @@
   .pt .top { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .pt .n { flex: none; width: 1.6em; color: var(--sub); text-align: right; }
   .pt button { flex: none; padding: 6px 10px; font-size: 0.85rem; }
-  .trow { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .trow { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  .trow button { white-space: nowrap; }
   .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
   .filebtn { display: inline-block; font-size: 1rem; padding: 10px 18px; border: 1px solid var(--accent); background: var(--card); color: var(--accent); border-radius: 10px; cursor: pointer; }
   .filebtn input { display: none; }
@@ -166,6 +172,7 @@
     <p class="lead">「結論 → 道筋 → 経験 → 学び → まとめ」。どんなお題でも、この流れで書けるようになろう。</p>
     <div id="home-today"></div>
     <div id="home-list"></div>
+    <p id="home-bk"></p>
     <div class="foot">
       <a href="index.html">素材探しへ</a>
       <button class="link" id="to-parent">おうちの人用</button>
@@ -176,7 +183,11 @@
   <section class="view" id="v-write">
     <div class="wtop">
       <button class="link" id="back">← お題の一覧</button>
-      <span class="count" id="count"></span>
+      <span class="tools">
+        <button class="mini" id="w-print">印刷</button>
+        <button class="mini" id="w-pdf">PDF保存</button>
+        <span class="count" id="count"></span>
+      </span>
     </div>
     <div class="banner"><small>お題</small><div id="wtheme"></div></div>
     <div class="seg" id="seg"></div>
@@ -217,9 +228,11 @@
 
     <div class="sec">
       <h2>バックアップ</h2>
-      <p class="note">ブラウザのデータを消すと、お題も作文も消えます。ときどき書き出しておくと安心です。</p>
+      <p class="note">お題も作文も、このブラウザの中に保存されています。ブラウザのデータを消した場合や、別のブラウザ・別のパソコンで開いた場合は、空になります。バックアップファイルがあれば、下の「読み込み」で、途中まで書いた分も含めて元に戻せます。</p>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" id="p-auto" style="margin-top:.5em"><span>ときどき自動で、バックアップファイルを保存する<br><small style="color:var(--sub)">前回から30分以上あいて段落を進めたとき、お題を書き終えたときに、ブラウザの「ダウンロード」の保存先に入ります。</small></span></label>
+      <p class="note" id="p-bk-last"></p>
       <div class="btns">
-        <button id="btn-export">JSONで書き出し</button>
+        <button id="btn-export">いますぐバックアップを保存</button>
         <label class="filebtn">読み込み<input type="file" id="file" accept=".json,application/json"></label>
       </div>
     </div>
@@ -317,7 +330,7 @@
   /* ===== 状態 =====
      state = { name, pin, lastLevel, themes:[{id,title,text}],
                essays:{ [themeId]: {level, step, b:{1..5}, c, checks, done} } } */
-  var state = { name: "", pin: "", lastLevel: 1, themes: [], essays: {} };
+  var state = { name: "", pin: "", lastLevel: 1, autoBackup: true, lastBackup: 0, themes: [], essays: {} };
   var route = { view: "home", id: "" };
   var unlocked = false;
 
@@ -360,11 +373,13 @@
     return n;
   }
   function normalize(s, ver) {
-    var out = { name: "", pin: "", lastLevel: 1, themes: [], essays: {} };
+    var out = { name: "", pin: "", lastLevel: 1, autoBackup: true, lastBackup: 0, themes: [], essays: {} };
     if (!s || typeof s !== "object") return out;
     out.name = typeof s.name === "string" ? s.name : "";
     out.pin = (typeof s.pin === "string" && /^\d{4}$/.test(s.pin)) ? s.pin : "";
     out.lastLevel = (s.lastLevel === 2 || s.lastLevel === 3) ? s.lastLevel : 1;
+    out.autoBackup = s.autoBackup !== false;
+    out.lastBackup = typeof s.lastBackup === "number" ? s.lastBackup : 0;
     (Array.isArray(s.themes) ? s.themes : []).forEach(function (t) {
       if (t && typeof t.id === "string" && typeof t.text === "string") {
         out.themes.push({ id: t.id, title: typeof t.title === "string" ? t.title : "", text: t.text });
@@ -463,6 +478,7 @@
   }
   function renderHome() {
     var tb = $("home-today"), box = $("home-list"); tb.innerHTML = ""; box.innerHTML = "";
+    renderHomeBackup();
     if (!state.themes.length) {
       var em = document.createElement("div"); em.className = "empty";
       em.innerHTML = "<p>まだお題がありません。<br>おうちの人に、お題を入れてもらってね。</p>";
@@ -552,9 +568,11 @@
     });
   }
   function setStep(i) {
-    var e = essayOf(route.id);
+    var e = essayOf(route.id), was = e.done;
     e.step = i; if (i === DONE) e.done = true;
-    save(); renderWrite(); window.scrollTo(0, 0);
+    save();
+    maybeAutoBackup(i === DONE && !was);
+    renderWrite(); window.scrollTo(0, 0);
   }
   function head(title, small) {
     var h = document.createElement("div"); h.className = "stage-head";
@@ -639,10 +657,7 @@
     var pr = document.createElement("button"); pr.className = "primary"; pr.textContent = "印刷";
     pr.addEventListener("click", doPrint);
     var pdf = document.createElement("button"); pdf.textContent = "PDFで保存";
-    pdf.addEventListener("click", function () {
-      alert("印刷画面が開きます。送信先(プリンタ)を「PDFに保存」にして保存してください。");
-      doPrint();
-    });
+    pdf.addEventListener("click", pdfSave);
     var fix = document.createElement("button"); fix.textContent = "書きなおす";
     fix.addEventListener("click", function () { setStep(0); });
     var home = document.createElement("button"); home.textContent = "お題の一覧へ";
@@ -710,6 +725,7 @@
       card.appendChild(top); card.appendChild(ta); box.appendChild(card);
     });
     $("p-name").value = state.name;
+    renderParentBackup();
     $("p-pin-state").textContent = state.pin ? "いまはロックされています。" : "いまはロックされていません。";
     $("p-pin").value = "";
   }
@@ -765,6 +781,12 @@
     box.appendChild(cm);
   }
   function doPrint() { preparePrint(); window.print(); }
+  function pdfSave() {
+    alert("印刷画面が開きます。送信先(プリンタ)を「PDFに保存」にして保存してください。");
+    doPrint();
+  }
+  $("w-print").addEventListener("click", doPrint);
+  $("w-pdf").addEventListener("click", pdfSave);
   window.addEventListener("beforeprint", preparePrint);
 
   /* ===== バックアップ ===== */
@@ -772,22 +794,54 @@
     var d = new Date(), z = function (x) { return (x < 10 ? "0" : "") + x; };
     return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + "-" + z(d.getHours()) + z(d.getMinutes());
   }
-  $("btn-export").addEventListener("click", function () {
+  function backupData() {
     var data = { app: "aoba-sakubun", version: 4, name: state.name, lastLevel: state.lastLevel, themes: state.themes, essays: state.essays };
     data.readable = state.themes.map(function (t, i) {
       var e = state.essays[t.id];
       var lines = ["【" + (i + 1) + "】 お題: " + t.text];
-      if (e) {
-        lines.push(build(e).filter(function (p) { return p.filled; }).map(function (p) { return p.text; }).join("\n"));
-      }
+      if (e) lines.push(build(e).filter(function (p) { return p.filled; }).map(function (p) { return p.text; }).join("\n"));
       return lines.join("\n") + "\n";
     }).join("\n");
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    return data;
+  }
+  function downloadBackup(prefix) {
+    var blob = new Blob([JSON.stringify(backupData(), null, 2)], { type: "application/json" });
     var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "sakubun-" + stamp() + ".json";
+    a.href = URL.createObjectURL(blob); a.download = prefix + stamp() + ".json";
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-  });
+    state.lastBackup = Date.now(); save();
+  }
+  function hasContent() {
+    return state.themes.some(function (t) { var e = state.essays[t.id]; return e && countChars(build(e)) > 0; });
+  }
+  var AUTO_GAP = 30 * 60 * 1000; // 自動バックアップの最短間隔
+  function maybeAutoBackup(force) {
+    if (!state.autoBackup || !hasContent()) return;
+    if (!force && Date.now() - state.lastBackup < AUTO_GAP) return;
+    try { downloadBackup("sakubun-auto-"); } catch (err) { /* ダウンロードできなくても書く作業は続ける */ }
+  }
+  function fmtTime(ms) {
+    var d = new Date(ms), z = function (x) { return (x < 10 ? "0" : "") + x; };
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + d.getHours() + ":" + z(d.getMinutes());
+  }
+  function renderHomeBackup() {
+    var el = $("home-bk"); el.innerHTML = "";
+    if (!hasContent()) return;
+    var old = !state.lastBackup || (Date.now() - state.lastBackup) > 3 * 24 * 3600 * 1000;
+    el.className = "bk" + (old ? " warn" : "");
+    var sp = document.createElement("span");
+    sp.textContent = state.lastBackup ? "最後のバックアップ: " + fmtTime(state.lastBackup) + " " : "まだバックアップを保存していません。 ";
+    var b = document.createElement("button"); b.className = "link"; b.textContent = "今すぐ保存";
+    b.addEventListener("click", function () { downloadBackup("sakubun-"); renderHomeBackup(); });
+    el.appendChild(sp); el.appendChild(b);
+  }
+  function renderParentBackup() {
+    $("p-auto").checked = !!state.autoBackup;
+    $("p-bk-last").textContent = state.lastBackup ? "最後にバックアップしたのは、" + fmtTime(state.lastBackup) + " です。" : "まだバックアップを保存していません。";
+  }
+  $("btn-export").addEventListener("click", function () { downloadBackup("sakubun-"); renderParentBackup(); });
+  $("p-auto").addEventListener("change", function (ev) { state.autoBackup = ev.target.checked; save(); });
   $("file").addEventListener("change", function (ev) {
     var f = ev.target.files && ev.target.files[0]; if (!f) return;
     var rd = new FileReader();
@@ -796,8 +850,9 @@
         var d = JSON.parse(rd.result);
         if (!d || d.app !== "aoba-sakubun" || !Array.isArray(d.themes)) throw new Error("形式が違います");
         if (state.themes.length && !confirm("いまのお題と作文が、読み込む内容で置き換わります。よいですか?")) return;
-        var keepPin = state.pin;
-        state = normalize(d, d.version === 4 ? 4 : (d.version === 3 ? 3 : 2)); state.pin = keepPin; // ロックは読み込みで変えない
+        var keep = { pin: state.pin, autoBackup: state.autoBackup, lastBackup: state.lastBackup };
+        state = normalize(d, d.version === 4 ? 4 : (d.version === 3 ? 3 : 2));
+        state.pin = keep.pin; state.autoBackup = keep.autoBackup; state.lastBackup = keep.lastBackup; // 端末ごとの設定は読み込みで変えない
         save(); renderParent();
       } catch (err) {
         alert("読み込めませんでした。このページで書き出したファイルを選んでください。");
@@ -812,6 +867,7 @@
     Array.prototype.forEach.call(document.querySelectorAll("#stage textarea.f"), grow);
   });
   load();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (err) { /* なし */ }
   onRoute();
 })();
 </script>
