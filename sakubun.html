@@ -64,9 +64,10 @@
   .theme-card .st { font-size: 0.8rem; color: var(--sub); font-weight: 400; display: block; }
   .theme-card.done .no { background: var(--accent); color: #fff; }
   .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--sub); }
-  .bkbar { margin-top: 18px; }
+  .bkbar { margin: 14px 0 16px; }
   .bkbar .btns { margin-top: 4px; }
-  .bk { margin: 0; font-size: 0.88rem; color: var(--sub); }
+  .bk-status { margin: 0; min-height: 1.3em; }
+  .bk { font-size: 0.88rem; color: var(--sub); }
   .bk.warn { color: var(--warn); font-weight: 600; }
   .bk button.link { padding: 0; font-size: 0.88rem; }
   .foot { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.9rem; }
@@ -176,14 +177,14 @@
     <h1>作文の型づくり</h1>
     <p class="lead">「結論 → 道筋 → 経験 → 学び → まとめ」。どんなお題でも、この流れで書けるようになろう。</p>
     <div id="home-today"></div>
-    <div id="home-list"></div>
     <div class="bkbar">
-      <p id="home-bk"></p>
+      <p class="bk-status"></p>
       <div class="btns">
-        <button class="mini" id="h-export">JSONで書き出し(バックアップ)</button>
-        <button class="mini" id="h-import">読み込み</button>
+        <button class="mini js-export">JSONで書き出し(バックアップ)</button>
+        <button class="mini js-import">読み込み</button>
       </div>
     </div>
+    <div id="home-list"></div>
     <input type="file" id="file2" accept=".json,application/json" hidden>
     <div class="foot">
       <a href="index.html">素材探しへ</a>
@@ -206,6 +207,13 @@
     <p class="seg-note" id="seg-note"></p>
     <ol class="steps" id="steps"></ol>
     <div id="stage"></div>
+    <div class="bkbar">
+      <p class="bk-status"></p>
+      <div class="btns">
+        <button class="mini js-export">JSONで書き出し(バックアップ)</button>
+        <button class="mini js-import">読み込み</button>
+      </div>
+    </div>
   </section>
 
   <!-- おうちの人用 -->
@@ -581,7 +589,7 @@
     });
     $("seg-note").textContent = LEVELS[e.level - 1].note;
     $("seg").style.display = $("seg-note").style.display = (e.step === DONE) ? "none" : "";
-    renderSteps(e); renderStage(e); updateCount();
+    renderSteps(e); renderStage(e); updateCount(); renderHomeBackup();
   }
   function renderSteps(e) {
     var ol = $("steps"); ol.innerHTML = "";
@@ -872,19 +880,24 @@
     return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + d.getHours() + ":" + z(d.getMinutes());
   }
   function renderHomeBackup() {
-    var el = $("home-bk"); el.innerHTML = ""; el.className = "";
-    if (!hasContent()) return;
     var old = !state.lastBackup || (Date.now() - state.lastBackup) > 3 * 24 * 3600 * 1000;
-    el.className = "bk" + (old ? " warn" : "");
-    el.textContent = state.lastBackup ? "最後のバックアップ: " + fmtTime(state.lastBackup) : "まだバックアップを保存していません。";
+    var txt = !hasContent() ? "" : (state.lastBackup ? "最後のバックアップ: " + fmtTime(state.lastBackup) : "まだバックアップを保存していません。");
+    Array.prototype.forEach.call(document.querySelectorAll(".bk-status"), function (el) {
+      el.textContent = txt;
+      el.className = "bk-status bk" + (txt && old ? " warn" : "");
+    });
   }
   function renderParentBackup() {
     $("p-auto").checked = !!state.autoBackup;
     $("p-bk-last").textContent = state.lastBackup ? "最後にバックアップしたのは、" + fmtTime(state.lastBackup) + " です。" : "まだバックアップを保存していません。";
   }
   $("btn-export").addEventListener("click", function () { downloadBackup("sakubun-"); renderParentBackup(); });
-  $("h-export").addEventListener("click", function () { downloadBackup("sakubun-"); renderHomeBackup(); });
-  $("h-import").addEventListener("click", function () { if (pinOk()) $("file2").click(); });
+  Array.prototype.forEach.call(document.querySelectorAll(".js-export"), function (b) {
+    b.addEventListener("click", function () { downloadBackup("sakubun-"); renderHomeBackup(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".js-import"), function (b) {
+    b.addEventListener("click", function () { if (pinOk()) $("file2").click(); });
+  });
   $("p-auto").addEventListener("change", function (ev) { state.autoBackup = ev.target.checked; save(); });
   function onImport(ev) {
     var f = ev.target.files && ev.target.files[0]; if (!f) return;
@@ -897,7 +910,9 @@
         var keep = { pin: state.pin, autoBackup: state.autoBackup, lastBackup: state.lastBackup };
         state = normalize(d, d.version === 4 ? 4 : (d.version === 3 ? 3 : 2));
         state.pin = keep.pin; state.autoBackup = keep.autoBackup; state.lastBackup = keep.lastBackup; // 端末ごとの設定は読み込みで変えない
-        save(); if (route.view === "parent") renderParent(); else renderHome();
+        save();
+        if (route.view === "parent") { renderParent(); }
+        else { history.replaceState(null, "", location.pathname + location.search); onRoute(); }
       } catch (err) {
         alert("読み込めませんでした。このページで書き出したファイルを選んでください。");
       }
