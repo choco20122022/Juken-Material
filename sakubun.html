@@ -64,7 +64,9 @@
   .theme-card .st { font-size: 0.8rem; color: var(--sub); font-weight: 400; display: block; }
   .theme-card.done .no { background: var(--accent); color: #fff; }
   .empty { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--sub); }
-  .bk { margin-top: 18px; font-size: 0.88rem; color: var(--sub); }
+  .bkbar { margin-top: 18px; }
+  .bkbar .btns { margin-top: 4px; }
+  .bk { margin: 0; font-size: 0.88rem; color: var(--sub); }
   .bk.warn { color: var(--warn); font-weight: 600; }
   .bk button.link { padding: 0; font-size: 0.88rem; }
   .foot { margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.9rem; }
@@ -108,6 +110,9 @@
   .nav .sp { flex: 1; }
 
   /* ---- 完成 ---- */
+  .notice { background: #fff3e6; border: 1px solid #f0cda7; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.9rem; }
+  .notice.ok { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .notice button.link { padding: 0; font-size: 0.9rem; }
   .essay-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px; }
   .essay-title { font-weight: 700; margin: 0 0 10px; font-size: 0.95rem; color: var(--sub); }
   .essay p { margin: 0; text-indent: 1em; line-height: 2.1; }
@@ -172,7 +177,14 @@
     <p class="lead">「結論 → 道筋 → 経験 → 学び → まとめ」。どんなお題でも、この流れで書けるようになろう。</p>
     <div id="home-today"></div>
     <div id="home-list"></div>
-    <p id="home-bk"></p>
+    <div class="bkbar">
+      <p id="home-bk"></p>
+      <div class="btns">
+        <button class="mini" id="h-export">JSONで書き出し(バックアップ)</button>
+        <button class="mini" id="h-import">読み込み</button>
+      </div>
+    </div>
+    <input type="file" id="file2" accept=".json,application/json" hidden>
     <div class="foot">
       <a href="index.html">素材探しへ</a>
       <button class="link" id="to-parent">おうちの人用</button>
@@ -329,17 +341,29 @@
 
   /* ===== 状態 =====
      state = { name, pin, lastLevel, themes:[{id,title,text}],
-               essays:{ [themeId]: {level, step, b:{1..5}, c, checks, done} } } */
+               essays:{ [themeId]: {level, step, b:{1..5}, c, checks} } } */
   var state = { name: "", pin: "", lastLevel: 1, autoBackup: true, lastBackup: 0, themes: [], essays: {} };
   var route = { view: "home", id: "" };
   var unlocked = false;
 
   function uid() { return "t" + Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36); }
-  function newEssay() { return { level: state.lastLevel || 1, step: 0, b: {}, c: "", checks: [false, false, false, false, false], done: false }; }
+  function newEssay() { return { level: state.lastLevel || 1, step: 0, b: {}, c: "", checks: [false, false, false, false, false] }; }
   function essayOf(id) { if (!state.essays[id]) state.essays[id] = newEssay(); return state.essays[id]; }
   function themeOf(id) { for (var i = 0; i < state.themes.length; i++) if (state.themes[i].id === id) return state.themes[i]; return null; }
   function titleOf(t) { if (t.title) return t.title; var s = t.text; return s.length > 28 ? s.slice(0, 28) + "…" : s; }
-  function isDone(id) { var e = state.essays[id]; return !!(e && e.done); }
+  function chars(str) { return (str || "").replace(/\s/g, "").length; }
+  function paraCount(e) { return (e.c || "").split(/\n+/).filter(function (l) { return l.trim(); }).length; }
+  function missingRoles(e) { return ROLES.filter(function (r) { return !(e.b[r.key] || "").trim(); }); }
+  // 書き終えた=5つの段落がすべて書かれている(白紙から書く場合は、5つ以上の段落がある)
+  function isComplete(e) { return missingRoles(e).length === 0 || paraCount(e) >= ROLES.length; }
+  function writtenChars(e) { return Math.max(ROLES.reduce(function (n, r) { return n + chars(e.b[r.key]); }, 0), chars(e.c)); }
+  // 書き終えていないのに完成画面で終わっていたら、書きかけの段落から再開する
+  function resumeStep(e) {
+    if (e.step !== DONE || isComplete(e)) return;
+    var m = missingRoles(e);
+    e.step = (e.level === 3 || !m.length) ? 0 : ROLES.indexOf(m[0]);
+  }
+  function isDone(id) { var e = state.essays[id]; return !!(e && isComplete(e)); }
 
   // v1/v2の「出だし固定・穴埋め」データを、文章として段落に直す
   var OLD_ROWS = {
@@ -369,7 +393,6 @@
     if (ver === 3) st = (st >= 6) ? DONE : (n.level === 3 ? 0 : Math.max(st - 1, 0));
     n.step = Math.min(st, DONE);
     if (Array.isArray(e.checks)) n.checks = [0, 1, 2, 3, 4].map(function (i) { return !!e.checks[i]; });
-    n.done = !!e.done;
     return n;
   }
   function normalize(s, ver) {
@@ -463,7 +486,11 @@
   function go(hash) { if (location.hash === hash) { onRoute(); } else { location.hash = hash; } }
   function onRoute() {
     var h = location.hash || "";
-    if (h.indexOf("#w=") === 0 && themeOf(h.slice(3))) { route = { view: "write", id: h.slice(3) }; renderWrite(); showView("write"); }
+    if (h.indexOf("#w=") === 0 && themeOf(h.slice(3))) {
+      route = { view: "write", id: h.slice(3) };
+      resumeStep(essayOf(route.id));
+      renderWrite(); showView("write");
+    }
     else if (h === "#parent" && (unlocked || !state.pin)) { route = { view: "parent", id: "" }; renderParent(); showView("parent"); }
     else { route = { view: "home", id: "" }; renderHome(); showView("home"); if (h && h !== "#") { history.replaceState(null, "", location.pathname + location.search); } }
     window.scrollTo(0, 0);
@@ -472,9 +499,9 @@
   /* ===== ホーム ===== */
   function statusOf(t) {
     var e = state.essays[t.id];
-    var n = e ? countChars(build(e)) : 0;
-    if (e && e.done) return "できあがり(" + n + "字)";
-    return n > 0 || (e && e.step > 0) ? "書きかけ(" + n + "字)" : "まだ書いていない";
+    var n = e ? writtenChars(e) : 0;
+    if (e && isComplete(e)) return "できあがり(" + n + "字)";
+    return n > 0 ? "書きかけ(" + n + "字)" : "まだ書いていない";
   }
   function renderHome() {
     var tb = $("home-today"), box = $("home-list"); tb.innerHTML = ""; box.innerHTML = "";
@@ -490,7 +517,7 @@
     for (var i = 0; i < state.themes.length; i++) if (!isDone(state.themes[i].id)) { next = state.themes[i]; break; }
     var today = document.createElement("button"); today.className = "today";
     if (next) {
-      var started = !!state.essays[next.id];
+      var ne = state.essays[next.id], started = !!ne && writtenChars(ne) > 0;
       today.innerHTML = "<small>今日のお題</small><div class='tt'></div><span class='go'></span>";
       today.querySelector(".tt").textContent = titleOf(next);
       today.querySelector(".go").textContent = started ? "つづきを書く →" : "書きはじめる →";
@@ -513,15 +540,16 @@
       box.appendChild(b);
     });
   }
-  function openParent() {
+  function pinOk() {
     if (state.pin && !unlocked) {
       var v = prompt("数字4けたを入れてください");
-      if (v === null) return;
-      if (v !== state.pin) { alert("番号がちがいます。"); return; }
+      if (v === null) return false;
+      if (v !== state.pin) { alert("番号がちがいます。"); return false; }
       unlocked = true;
     }
-    go("#parent");
+    return true;
   }
+  function openParent() { if (pinOk()) go("#parent"); }
 
   /* ===== 書く画面 ===== */
   function grow(ta) {
@@ -568,10 +596,10 @@
     });
   }
   function setStep(i) {
-    var e = essayOf(route.id), was = e.done;
-    e.step = i; if (i === DONE) e.done = true;
+    var e = essayOf(route.id);
+    e.step = i;
     save();
-    maybeAutoBackup(i === DONE && !was);
+    maybeAutoBackup(i === DONE ? 5 * 60 * 1000 : AUTO_GAP);
     renderWrite(); window.scrollTo(0, 0);
   }
   function head(title, small) {
@@ -627,6 +655,24 @@
 
   function renderDone(e, st) {
     var paras = build(e);
+    var nt = document.createElement("div");
+    if (e.level === 3 ? paraCount(e) >= ROLES.length : missingRoles(e).length === 0) {
+      nt.className = "notice ok"; nt.textContent = "✓ 5つの段落がそろいました。書き終えです。";
+    } else {
+      nt.className = "notice";
+      var msg = document.createElement("span");
+      var go1 = document.createElement("button"); go1.className = "link"; go1.textContent = "書きにもどる";
+      if (e.level === 3) {
+        msg.textContent = "段落が5つに分かれていません(いま" + paraCount(e) + "つ)。結論・道筋・経験・学び・まとめの5つに分けて書こう。 ";
+        go1.addEventListener("click", function () { setStep(0); });
+      } else {
+        var miss = missingRoles(e);
+        msg.textContent = "まだ書いていない段落があります: " + miss.map(function (r) { return r.name; }).join("、") + "。 ";
+        go1.addEventListener("click", function () { setStep(ROLES.indexOf(miss[0])); });
+      }
+      nt.appendChild(msg); nt.appendChild(go1);
+    }
+    st.appendChild(nt);
     var wrap = document.createElement("div"); wrap.className = "essay-wrap";
     var tt = document.createElement("div"); tt.className = "essay-title"; tt.textContent = themeOf(route.id).text;
     wrap.appendChild(tt);
@@ -816,9 +862,9 @@
     return state.themes.some(function (t) { var e = state.essays[t.id]; return e && countChars(build(e)) > 0; });
   }
   var AUTO_GAP = 30 * 60 * 1000; // 自動バックアップの最短間隔
-  function maybeAutoBackup(force) {
+  function maybeAutoBackup(gap) {
     if (!state.autoBackup || !hasContent()) return;
-    if (!force && Date.now() - state.lastBackup < AUTO_GAP) return;
+    if (Date.now() - state.lastBackup < gap) return;
     try { downloadBackup("sakubun-auto-"); } catch (err) { /* ダウンロードできなくても書く作業は続ける */ }
   }
   function fmtTime(ms) {
@@ -826,23 +872,21 @@
     return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + d.getHours() + ":" + z(d.getMinutes());
   }
   function renderHomeBackup() {
-    var el = $("home-bk"); el.innerHTML = "";
+    var el = $("home-bk"); el.innerHTML = ""; el.className = "";
     if (!hasContent()) return;
     var old = !state.lastBackup || (Date.now() - state.lastBackup) > 3 * 24 * 3600 * 1000;
     el.className = "bk" + (old ? " warn" : "");
-    var sp = document.createElement("span");
-    sp.textContent = state.lastBackup ? "最後のバックアップ: " + fmtTime(state.lastBackup) + " " : "まだバックアップを保存していません。 ";
-    var b = document.createElement("button"); b.className = "link"; b.textContent = "今すぐ保存";
-    b.addEventListener("click", function () { downloadBackup("sakubun-"); renderHomeBackup(); });
-    el.appendChild(sp); el.appendChild(b);
+    el.textContent = state.lastBackup ? "最後のバックアップ: " + fmtTime(state.lastBackup) : "まだバックアップを保存していません。";
   }
   function renderParentBackup() {
     $("p-auto").checked = !!state.autoBackup;
     $("p-bk-last").textContent = state.lastBackup ? "最後にバックアップしたのは、" + fmtTime(state.lastBackup) + " です。" : "まだバックアップを保存していません。";
   }
   $("btn-export").addEventListener("click", function () { downloadBackup("sakubun-"); renderParentBackup(); });
+  $("h-export").addEventListener("click", function () { downloadBackup("sakubun-"); renderHomeBackup(); });
+  $("h-import").addEventListener("click", function () { if (pinOk()) $("file2").click(); });
   $("p-auto").addEventListener("change", function (ev) { state.autoBackup = ev.target.checked; save(); });
-  $("file").addEventListener("change", function (ev) {
+  function onImport(ev) {
     var f = ev.target.files && ev.target.files[0]; if (!f) return;
     var rd = new FileReader();
     rd.onload = function () {
@@ -853,14 +897,16 @@
         var keep = { pin: state.pin, autoBackup: state.autoBackup, lastBackup: state.lastBackup };
         state = normalize(d, d.version === 4 ? 4 : (d.version === 3 ? 3 : 2));
         state.pin = keep.pin; state.autoBackup = keep.autoBackup; state.lastBackup = keep.lastBackup; // 端末ごとの設定は読み込みで変えない
-        save(); renderParent();
+        save(); if (route.view === "parent") renderParent(); else renderHome();
       } catch (err) {
         alert("読み込めませんでした。このページで書き出したファイルを選んでください。");
       }
       ev.target.value = "";
     };
     rd.readAsText(f);
-  });
+  }
+  $("file").addEventListener("change", onImport);
+  $("file2").addEventListener("change", onImport);
 
   window.addEventListener("hashchange", onRoute);
   window.addEventListener("resize", function () {
