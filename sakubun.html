@@ -93,16 +93,12 @@
   .stage-head button { padding: 6px 12px; font-size: 0.85rem; flex: none; }
   .ask { color: var(--accent); font-weight: 600; margin: 10px 0 4px; }
   .prior { color: #8a8478; font-size: 0.88rem; border-left: 3px solid var(--line); padding: 2px 0 2px 10px; margin: 12px 0; }
-  .memo { background: var(--mark); border-radius: 8px; padding: 6px 10px; margin: 10px 0; font-size: 0.92rem; }
   .eg { color: #8a8478; font-size: 0.85rem; margin-top: 6px; }
   textarea.f {
     display: block; width: 100%; padding: 9px 11px; font: inherit; font-size: 1.05rem; line-height: 1.7;
     border: 1px solid var(--line); border-radius: 8px; background: #fffefb; resize: vertical; margin-top: 6px;
   }
   textarea.f:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .mrow { margin: 14px 0; }
-  .mrow .rl { display: inline-block; font-weight: 700; color: #fff; background: var(--accent); border-radius: 6px; padding: 0 10px; font-size: 0.9rem; }
-  .mrow .qd { font-size: 0.88rem; color: var(--sub); margin-top: 2px; }
   .nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
   .nav .sp { flex: 1; }
 
@@ -154,7 +150,6 @@
     #print-area h1 { font-size: 16pt; margin: 0 0 6pt; }
     .ph-head { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 4pt; margin-bottom: 10pt; font-size: 11pt; gap: 12pt; }
     .ph-theme { font-size: 12pt; font-weight: 700; margin: 0 0 8pt; line-height: 1.6; }
-    .ph-memo { border: 1px solid #000; padding: 4pt 8pt; margin-bottom: 10pt; font-size: 10pt; line-height: 1.6; }
     .ph-body p { margin: 0; text-indent: 1em; line-height: 2.1; }
     .ph-count { text-align: right; font-size: 10pt; margin-top: 6pt; }
     .ph-comment { margin-top: 18pt; border: 1px solid #000; padding: 6pt 8pt; height: 50mm; break-inside: avoid; }
@@ -272,8 +267,8 @@
     { name: "② 役割だけ", note: "5つの役割だけを手がかりに、自分で書こう。" },
     { name: "③ 白紙から", note: "役割を頭の中で思い出しながら、白紙から書こう。" }
   ];
-  var STEP_NAMES = ["構成"].concat(ROLES.map(function (r) { return r.name; }), ["完成"]);
-  var DONE = 6; // 0=構成メモ, 1〜5=各段落, 6=完成
+  var STEP_NAMES = ROLES.map(function (r) { return r.name; }).concat(["完成"]);
+  var DONE = 5; // 0〜4=各段落(結論〜まとめ), 5=完成
 
   var SAMPLES = [
     { tab: "体験を書くお題", theme: "お題の例:感謝を伝えること",
@@ -314,19 +309,20 @@
     ["将来なりたい大人の姿", "あなたが将来、どんな大人になりたいか（どのような社会人になりたいか）、現時点で考えている理想の姿を記述しなさい。"]
   ];
 
-  var KEY = "aoba-sakubun-v3";
+  var KEY = "aoba-sakubun-v4";
+  var KEY_V3 = "aoba-sakubun-v3";
   var KEY_V2 = "aoba-sakubun-v2";
   var KEY_V1 = "aoba-sakubun-v1";
 
   /* ===== 状態 =====
      state = { name, pin, lastLevel, themes:[{id,title,text}],
-               essays:{ [themeId]: {level, step, memo:{1..5}, b:{1..5}, c, checks, done} } } */
+               essays:{ [themeId]: {level, step, b:{1..5}, c, checks, done} } } */
   var state = { name: "", pin: "", lastLevel: 1, themes: [], essays: {} };
   var route = { view: "home", id: "" };
   var unlocked = false;
 
   function uid() { return "t" + Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36); }
-  function newEssay() { return { level: state.lastLevel || 1, step: 0, memo: {}, b: {}, c: "", checks: [false, false, false, false, false], done: false }; }
+  function newEssay() { return { level: state.lastLevel || 1, step: 0, b: {}, c: "", checks: [false, false, false, false, false], done: false }; }
   function essayOf(id) { if (!state.essays[id]) state.essays[id] = newEssay(); return state.essays[id]; }
   function themeOf(id) { for (var i = 0; i < state.themes.length; i++) if (state.themes[i].id === id) return state.themes[i]; return null; }
   function titleOf(t) { if (t.title) return t.title; var s = t.text; return s.length > 28 ? s.slice(0, 28) + "…" : s; }
@@ -342,7 +338,6 @@
     var n = newEssay();
     if (!e || typeof e !== "object") return n;
     n.level = (e.level === 2 || e.level === 3) ? e.level : 1;
-    n.memo = (e.memo && typeof e.memo === "object") ? e.memo : {};
     n.b = (e.b && typeof e.b === "object") ? e.b : {};
     n.c = typeof e.c === "string" ? e.c : "";
     if (e.a && typeof e.a === "object") {
@@ -357,7 +352,8 @@
       });
     }
     var st = (typeof e.step === "number" && e.step >= 0) ? e.step : 0;
-    if (ver < 3) st = (st >= 5) ? DONE : (n.level === 3 ? 0 : st + 1);
+    // v3(構成メモあり)は、構成=0, 結論〜まとめ=1〜5, 完成=6。いまは結論〜まとめ=0〜4, 完成=5
+    if (ver === 3) st = (st >= 6) ? DONE : (n.level === 3 ? 0 : Math.max(st - 1, 0));
     n.step = Math.min(st, DONE);
     if (Array.isArray(e.checks)) n.checks = [0, 1, 2, 3, 4].map(function (i) { return !!e.checks[i]; });
     n.done = !!e.done;
@@ -399,7 +395,9 @@
     var raw;
     try {
       raw = localStorage.getItem(KEY);
-      if (raw) { state = normalize(JSON.parse(raw), 3); return; }
+      if (raw) { state = normalize(JSON.parse(raw), 4); return; }
+      raw = localStorage.getItem(KEY_V3);
+      if (raw) { state = normalize(JSON.parse(raw), 3); save(); return; }
       raw = localStorage.getItem(KEY_V2);
       if (raw) { state = normalize(JSON.parse(raw), 2); save(); return; }
       raw = localStorage.getItem(KEY_V1);
@@ -442,12 +440,6 @@
     paras.forEach(function (p) { if (p.filled) n += p.text.replace(/\s/g, "").length; });
     return n;
   }
-  function memoLines(e) {
-    if (e.level === 3) return [];
-    return ROLES.filter(function (r) { return (e.memo[r.key] || "").trim(); })
-      .map(function (r) { return r.name + ": " + e.memo[r.key].trim(); });
-  }
-
   /* ===== 画面の切り替え ===== */
   var $ = function (id) { return document.getElementById(id); };
   function showView(name) {
@@ -599,30 +591,17 @@
       var fin = document.createElement("button"); fin.className = "primary"; fin.textContent = "できあがり →";
       fin.addEventListener("click", function () { setStep(DONE); });
       nav3.appendChild(sp3); nav3.appendChild(fin); card.appendChild(nav3);
-    } else if (e.step === 0) {
-      // 構成メモ: お題を5つの役割に当てはめる
-      card.appendChild(head("まず、構成を決めよう", "お題を読んで、5つの役割に何を書くか、短いメモにしよう。(短くてOK)"));
-      ROLES.forEach(function (r) {
-        var row = document.createElement("div"); row.className = "mrow";
-        var rl = document.createElement("span"); rl.className = "rl"; rl.textContent = r.name;
-        var qd = document.createElement("div"); qd.className = "qd"; qd.textContent = e.level === 1 ? r.ask : r.def;
-        var ta = makeTA(e.memo[r.key], "メモ", 70, function (v) { e.memo[r.key] = v; save(); });
-        row.appendChild(rl); row.appendChild(qd); row.appendChild(ta); card.appendChild(row); tas.push(ta);
-      });
-      card.appendChild(navBar(null, "つぎへ →", 1));
     } else {
-      var i = e.step, r = ROLES[i - 1];
-      card.appendChild(head(i + ". " + r.name, r.def));
+      var i = e.step, r = ROLES[i];
+      card.appendChild(head((i + 1) + ". " + r.name, r.def));
       if (e.level === 1) { var ask = document.createElement("div"); ask.className = "ask"; ask.textContent = "問い: " + r.ask; card.appendChild(ask); }
       var paras = build(e), prior = [];
-      for (var k = 0; k < i - 1; k++) if (paras[k].filled) prior.push(paras[k].text);
+      for (var k = 0; k < i; k++) if (paras[k].filled) prior.push(paras[k].text);
       if (prior.length) { var pr = document.createElement("div"); pr.className = "prior"; pr.textContent = prior.join(""); card.appendChild(pr); }
-      var mm = (e.memo[r.key] || "").trim();
-      if (mm) { var m = document.createElement("div"); m.className = "memo"; m.textContent = "メモ: " + mm; card.appendChild(m); }
       var ta = makeTA(e.b[r.key], "「" + r.name + "」の段落を書く", 130, function (v) { e.b[r.key] = v; save(); });
       card.appendChild(ta); tas.push(ta);
       if (e.level === 1) { var eg = document.createElement("div"); eg.className = "eg"; eg.textContent = "書き出しの例: " + r.eg; card.appendChild(eg); }
-      card.appendChild(navBar(i - 1, i === ROLES.length ? "できあがり →" : "つぎへ →", i + 1));
+      card.appendChild(navBar(i === 0 ? null : i - 1, i === ROLES.length - 1 ? "できあがり →" : "つぎへ →", i + 1));
     }
     st.appendChild(card);
     tas.forEach(grow);
@@ -665,7 +644,7 @@
       doPrint();
     });
     var fix = document.createElement("button"); fix.textContent = "書きなおす";
-    fix.addEventListener("click", function () { setStep(e.level === 3 ? 0 : 1); });
+    fix.addEventListener("click", function () { setStep(0); });
     var home = document.createElement("button"); home.textContent = "お題の一覧へ";
     home.addEventListener("click", function () { go("#"); });
     ac.appendChild(pr); ac.appendChild(pdf); ac.appendChild(fix); ac.appendChild(home);
@@ -693,7 +672,7 @@
     s.paras.forEach(function (t, i) {
       var rl = document.createElement("span"); rl.className = "rl"; rl.textContent = ROLES[i].name; box.appendChild(rl);
       var p = document.createElement("p"); p.textContent = t;
-      if (e.level !== 3 && e.step === i + 1) p.className = "cur";
+      if (e.level !== 3 && e.step === i) p.className = "cur";
       box.appendChild(p);
     });
     var nt = document.createElement("p"); nt.className = "note"; nt.textContent = s.note; box.appendChild(nt);
@@ -775,13 +754,6 @@
     head.appendChild(l); head.appendChild(r); box.appendChild(head);
     var th = document.createElement("div"); th.className = "ph-theme"; th.textContent = "お題: " + themeOf(route.id).text;
     box.appendChild(th);
-    var ml = memoLines(e);
-    if (ml.length) {
-      var mm = document.createElement("div"); mm.className = "ph-memo";
-      var mt = document.createElement("b"); mt.textContent = "構成メモ"; mm.appendChild(mt);
-      ml.forEach(function (x) { var d = document.createElement("div"); d.textContent = x; mm.appendChild(d); });
-      box.appendChild(mm);
-    }
     var body = document.createElement("div"); body.className = "ph-body";
     var paras = build(e);
     paras.forEach(function (p) { if (p.filled) { var el = document.createElement("p"); el.textContent = p.text; body.appendChild(el); } });
@@ -801,13 +773,11 @@
     return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + "-" + z(d.getHours()) + z(d.getMinutes());
   }
   $("btn-export").addEventListener("click", function () {
-    var data = { app: "aoba-sakubun", version: 3, name: state.name, lastLevel: state.lastLevel, themes: state.themes, essays: state.essays };
+    var data = { app: "aoba-sakubun", version: 4, name: state.name, lastLevel: state.lastLevel, themes: state.themes, essays: state.essays };
     data.readable = state.themes.map(function (t, i) {
       var e = state.essays[t.id];
       var lines = ["【" + (i + 1) + "】 お題: " + t.text];
       if (e) {
-        var ml = memoLines(e);
-        if (ml.length) lines.push("(構成メモ)\n" + ml.join("\n"));
         lines.push(build(e).filter(function (p) { return p.filled; }).map(function (p) { return p.text; }).join("\n"));
       }
       return lines.join("\n") + "\n";
@@ -827,7 +797,7 @@
         if (!d || d.app !== "aoba-sakubun" || !Array.isArray(d.themes)) throw new Error("形式が違います");
         if (state.themes.length && !confirm("いまのお題と作文が、読み込む内容で置き換わります。よいですか?")) return;
         var keepPin = state.pin;
-        state = normalize(d, d.version === 3 ? 3 : 2); state.pin = keepPin; // ロックは読み込みで変えない
+        state = normalize(d, d.version === 4 ? 4 : (d.version === 3 ? 3 : 2)); state.pin = keepPin; // ロックは読み込みで変えない
         save(); renderParent();
       } catch (err) {
         alert("読み込めませんでした。このページで書き出したファイルを選んでください。");
