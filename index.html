@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>素材探しの旅</title>
+<style>
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --ink: #222;
+    --sub: #666;
+    --line: #d8d3c8;
+    --accent: #2f6b4f;
+    --accent-soft: #e4efe8;
+    --warn: #b3541e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 16px; }
+  header h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  header p { margin: 0 0 12px; color: var(--sub); font-size: 0.95rem; }
+
+  .meta {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; margin-bottom: 12px;
+  }
+  .meta label { display: flex; flex-direction: column; font-size: 0.85rem; color: var(--sub); flex: 1 1 200px; }
+  .meta input {
+    font: inherit; font-size: 1rem; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 6px; margin-top: 4px;
+  }
+
+  .toolbar {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg); padding: 8px 0 10px;
+    border-bottom: 1px solid var(--line); margin-bottom: 14px;
+  }
+  .progress { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.9rem; }
+  .bar { flex: 1; height: 10px; background: #e5e1d6; border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .saved { color: var(--accent); min-width: 7em; text-align: right; }
+  .buttons { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, .filebtn {
+    font: inherit; font-size: 0.95rem; padding: 8px 14px;
+    border: 1px solid var(--accent); background: var(--card); color: var(--accent);
+    border-radius: 8px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #fff; }
+  button:hover, .filebtn:hover { filter: brightness(0.96); }
+  .filebtn input { display: none; }
+  .opt { font-size: 0.85rem; color: var(--sub); display: inline-flex; align-items: center; gap: 4px; }
+
+  .q {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    break-inside: avoid;
+  }
+  .q.done { border-color: var(--accent); background: #fbfefc; }
+  .qhead { display: flex; gap: 10px; align-items: baseline; }
+  .num {
+    flex: none; width: 1.9em; height: 1.9em; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.9rem;
+  }
+  .qtext { font-weight: 600; }
+  textarea {
+    width: 100%; margin-top: 8px; padding: 10px;
+    font: inherit; font-size: 1rem; line-height: 1.7;
+    border: 1px solid var(--line); border-radius: 8px;
+    min-height: 4.5em; resize: vertical; background: #fffefb;
+  }
+  textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .print-answer { display: none; }
+
+  footer { color: var(--sub); font-size: 0.85rem; margin: 20px 0 40px; }
+  footer p { margin: 4px 0; }
+  .print-head { display: none; }
+
+  /* ---- 印刷用(白黒・インク節約) ---- */
+  @media print {
+    @page { size: A4; margin: 14mm 14mm; }
+    body { background: #fff; color: #000; font-size: 11pt; line-height: 1.6; }
+    .wrap { max-width: none; padding: 0; }
+    .toolbar, .meta, footer, header p, textarea { display: none !important; }
+    header h1 { font-size: 16pt; margin: 0 0 4pt; }
+    .print-head {
+      display: flex; justify-content: space-between;
+      border-bottom: 1px solid #000; padding-bottom: 4pt; margin-bottom: 8pt; font-size: 10.5pt;
+    }
+    .q { background: #fff !important; border: none; border-bottom: 1px solid #999; border-radius: 0; padding: 6pt 0 8pt; margin: 0; }
+    .q.done { border-color: #999; }
+    .num { background: none; color: #000; border: 1px solid #000; width: 1.7em; height: 1.7em; font-size: 9.5pt; }
+    .qtext { font-weight: 700; }
+    .print-answer {
+      display: block; white-space: pre-wrap; word-break: break-word;
+      margin: 4pt 0 0 2.3em; min-height: 2.6em;
+    }
+    body.wide .print-answer { min-height: 7em; }
+    body.wide .q { padding-bottom: 12pt; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>素材探しの旅</h1>
+    <p>インタビューに答えるつもりで、次の問いに答えてね。これが作文の素材になるよ。</p>
+  </header>
+
+  <div class="meta">
+    <label>名前(空でもOK)
+      <input id="name" type="text" autocomplete="off">
+    </label>
+    <label>日付
+      <input id="date" type="date">
+    </label>
+  </div>
+
+  <div class="toolbar">
+    <div class="progress">
+      <span id="count">0 / 30</span>
+      <div class="bar"><div id="bar"></div></div>
+      <span class="saved" id="saved"></span>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="btn-print">印刷</button>
+      <button id="btn-pdf">PDFで保存</button>
+      <button id="btn-export">テキストで書き出し</button>
+      <label class="filebtn">読み込み<input type="file" id="file" accept=".json,application/json"></label>
+      <label class="opt"><input type="checkbox" id="wide"> 印刷の答え欄を広くする(書き足し・赤ペン用)</label>
+    </div>
+  </div>
+
+  <div class="print-head">
+    <span id="ph-name"></span>
+    <span id="ph-date"></span>
+  </div>
+
+  <main id="list"></main>
+
+  <footer>
+    <p>入力した内容は、このパソコン(ブラウザ)の中だけに自動で保存されます。インターネットには送られません。</p>
+    <p>ブラウザの履歴やサイトデータを消すと、保存した内容も消えます。大事な日は「テキストで書き出し」で別に残してください。</p>
+    <p>「PDFで保存」を押すと印刷画面が開くので、送信先(プリンタ)を「PDFに保存」にしてください。</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var QUESTIONS = [
+    "青葉総合高校を知ったきっかけは?",
+    "なぜ青葉総合高校を選んだのか?",
+    "中学校生活で、得意だったことは?",
+    "中学校生活で、苦手だったことは?",
+    "中学校生活で、一番楽しかったことは?",
+    "中学校生活で、一番嫌だったことは?",
+    "中学校生活で、一番がんばったことは?",
+    "中学校生活での、心残りは?",
+    "青葉総合高校に入ったら、一番やってみたいことは?",
+    "それをやってみたいと思ったのは、なぜ?",
+    "学校案内やホームページを見て、気になったことは?(科目、設備、ルール、行事など)",
+    "高校生活で、不安なことは?",
+    "高校の3年間が終わるとき、どんな自分になっていたい?",
+    "高校を卒業したあと、やりたいことは?",
+    "学校以外で、時間を忘れてやることは?(趣味、ゲーム、動画、運動など)",
+    "家や地域で、続けていることは?(手伝い、習い事など)",
+    "学校で、よくやることは?",
+    "人に言われて、うれしかった言葉は?",
+    "人に注意されること、自分で直したいところは?",
+    "尊敬する人、あこがれる人は? その理由は?",
+    "人に助けてもらったことは?",
+    "人を助けたこと、人の役に立てたことは?",
+    "一番の失敗は? そこから、何を学んだ?",
+    "中学1年のときの自分と、今の自分で、変わったところは?",
+    "勇気を出してやったことは?",
+    "途中でやめたこと、逃げたことは?",
+    "好きな教科や授業は? その理由は?",
+    "自分の性格を、3つの言葉で言うと?",
+    "将来の夢や目標は?",
+    "休みの日は何をして過ごすのが好き?"
+  ];
+  var KEY = "aoba-sozai-v1";
+
+  var state = { name: "", date: "", wide: false, answers: {} };
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && typeof s === "object") {
+          state.name = s.name || "";
+          state.date = s.date || "";
+          state.wide = !!s.wide;
+          state.answers = s.answers || {};
+        }
+      }
+    } catch (e) { /* 保存領域が使えない場合は、画面上だけで動く */ }
+  }
+
+  var saveTimer = null, canSave = true;
+  function save() {
+    var el = document.getElementById("saved");
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+      canSave = true;
+      el.style.color = "";
+      el.textContent = "保存しました";
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () { el.textContent = ""; }, 1800);
+    } catch (e) {
+      canSave = false;
+      el.style.color = "var(--warn)";
+      el.textContent = "自動保存できません。書き出しを使ってください";
+    }
+  }
+
+  var list = document.getElementById("list");
+  var rows = [];
+
+  function build() {
+    QUESTIONS.forEach(function (q, i) {
+      var n = i + 1;
+      var box = document.createElement("section");
+      box.className = "q";
+      var head = document.createElement("div");
+      head.className = "qhead";
+      var num = document.createElement("span");
+      num.className = "num"; num.textContent = n;
+      var qt = document.createElement("span");
+      qt.className = "qtext"; qt.textContent = q;
+      head.appendChild(num); head.appendChild(qt);
+
+      var ta = document.createElement("textarea");
+      ta.setAttribute("aria-label", n + "番の答え");
+      var pa = document.createElement("div");
+      pa.className = "print-answer";
+
+      ta.addEventListener("input", function () {
+        state.answers[n] = ta.value;
+        sync(box, ta, pa);
+        grow(ta);
+        updateProgress();
+        save();
+      });
+
+      box.appendChild(head); box.appendChild(ta); box.appendChild(pa);
+      list.appendChild(box);
+      rows.push({ n: n, box: box, ta: ta, pa: pa });
+    });
+  }
+
+  function sync(box, ta, pa) {
+    pa.textContent = ta.value;
+    box.classList.toggle("done", ta.value.trim().length > 0);
+  }
+  function grow(ta) {
+    ta.style.height = "auto";
+    ta.style.height = Math.max(ta.scrollHeight + 2, 80) + "px";
+  }
+  function updateProgress() {
+    var done = rows.filter(function (r) { return r.ta.value.trim().length > 0; }).length;
+    document.getElementById("count").textContent = done + " / " + QUESTIONS.length;
+    document.getElementById("bar").style.width = (done / QUESTIONS.length * 100) + "%";
+  }
+  function fillFromState() {
+    rows.forEach(function (r) {
+      r.ta.value = state.answers[r.n] || "";
+      sync(r.box, r.ta, r.pa);
+      grow(r.ta);
+    });
+    document.getElementById("name").value = state.name;
+    document.getElementById("date").value = state.date;
+    document.getElementById("wide").checked = state.wide;
+    document.body.classList.toggle("wide", state.wide);
+    updateProgress();
+  }
+
+  function fmtDate(v) {
+    if (!v) return "";
+    var p = v.split("-");
+    return p.length === 3 ? p[0] + "年" + Number(p[1]) + "月" + Number(p[2]) + "日" : v;
+  }
+  function preparePrint() {
+    document.getElementById("ph-name").textContent = state.name ? "名前: " + state.name : "名前:";
+    document.getElementById("ph-date").textContent = "日付: " + fmtDate(state.date);
+    rows.forEach(function (r) { r.pa.textContent = r.ta.value; });
+  }
+  function doPrint() { preparePrint(); window.print(); }
+
+  document.getElementById("btn-print").addEventListener("click", doPrint);
+  document.getElementById("btn-pdf").addEventListener("click", function () {
+    alert("印刷画面が開きます。送信先(プリンタ)を「PDFに保存」にして保存してください。");
+    doPrint();
+  });
+  window.addEventListener("beforeprint", preparePrint);
+
+  document.getElementById("name").addEventListener("input", function (e) { state.name = e.target.value; save(); });
+  document.getElementById("date").addEventListener("input", function (e) { state.date = e.target.value; save(); });
+  document.getElementById("wide").addEventListener("change", function (e) {
+    state.wide = e.target.checked;
+    document.body.classList.toggle("wide", state.wide);
+    save();
+  });
+
+  function download(filename, text, type) {
+    var blob = new Blob([text], { type: type });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function stamp() {
+    var d = new Date();
+    function z(x) { return (x < 10 ? "0" : "") + x; }
+    return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + "-" + z(d.getHours()) + z(d.getMinutes());
+  }
+
+  // 書き出し: 読み込み用データ(JSON)の中に、読める文章も入れる。ファイルは1つだけ。
+  document.getElementById("btn-export").addEventListener("click", function () {
+    var readable = QUESTIONS.map(function (q, i) {
+      return (i + 1) + ". " + q + "\n" + (state.answers[i + 1] || "") + "\n";
+    }).join("\n");
+    var data = {
+      app: "aoba-sozai", version: 1,
+      name: state.name, date: state.date, answers: state.answers,
+      readable: readable
+    };
+    download("sozai-" + stamp() + ".json", JSON.stringify(data, null, 2), "application/json");
+  });
+
+  document.getElementById("file").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var d = JSON.parse(rd.result);
+        if (!d || d.app !== "aoba-sozai" || typeof d.answers !== "object") throw new Error("形式が違います");
+        var has = Object.keys(state.answers).some(function (k) { return (state.answers[k] || "").trim(); });
+        if (has && !confirm("いま入力してある内容が、読み込む内容で置き換わります。よいですか?")) return;
+        state.name = d.name || ""; state.date = d.date || ""; state.answers = d.answers;
+        fillFromState(); save();
+      } catch (err) {
+        alert("読み込めませんでした。このページで書き出したファイルを選んでください。");
+      }
+      e.target.value = "";
+    };
+    rd.readAsText(f);
+  });
+
+  build();
+  load();
+  if (!state.date) {
+    var t = new Date();
+    function z(x) { return (x < 10 ? "0" : "") + x; }
+    state.date = t.getFullYear() + "-" + z(t.getMonth() + 1) + "-" + z(t.getDate());
+  }
+  fillFromState();
+  window.addEventListener("resize", function () { rows.forEach(function (r) { grow(r.ta); }); });
+})();
+</script>
+</body>
+</html>
